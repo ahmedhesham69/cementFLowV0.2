@@ -32,6 +32,7 @@
         <button class="nav-tab-btn" data-tab="entryTab">إدخال البيانات</button>
         <button class="nav-tab-btn" data-tab="logsTab">سجل الحركات</button>
         <button class="nav-tab-btn" data-tab="settingsTab">الاتصال بقاعدة البيانات</button>
+        <button class="nav-tab-btn" data-tab="autoImportTab">الرفع التلقائي للنصوص</button>
       </nav>
       
       <div class="status-indicator">
@@ -560,6 +561,46 @@
           <div class="settings-help">
             <h3>تنبيه هام حول الأمن:</h3>
             <p>يتم تخزين بيانات الاتصال الخاصة بك محلياً وبشكل آمن في متصفحك فقط (عبر LocalStorage) ولا يتم إرسالها لأي خادم خارجي.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 6: AUTO-IMPORT FROM TEXT -->
+      <div class="tab-pane" id="autoImportTab">
+        <div class="section-header">
+          <h2>الرفع التلقائي ومعالجة نصوص الرسائل</h2>
+          <p>انسخ الرسائل النصية من واتساب (مخططات التحميل أو إثباتات الشحن) والصقها هنا ليتم معالجتها وحفظها دفعة واحدة.</p>
+        </div>
+
+        <div class="settings-card" style="max-width: 100%; margin: 0; width: 100%;">
+          <h3>لصق نصوص الرسائل</h3>
+          <textarea id="importRawText" rows="10" placeholder="الصق رسائل الواتساب هنا..." style="width: 100%; border-radius: 8px; border: 1px solid var(--border-light); padding: 12px; font-family: monospace; font-size: 13px; background-color: var(--bg-input); color: var(--text-main); direction: ltr; text-align: right; outline: none; resize: vertical;"></textarea>
+          
+          <div class="settings-actions">
+            <button type="button" id="btnParsePlans" class="apple-btn">معالجة كخطة تحميل (مخطط التحميلات)</button>
+            <button type="button" id="btnParseTrips" class="apple-btn">معالجة كرحلات فعلية (مخطط الإثباتات)</button>
+            <button type="button" id="btnClearImport" class="apple-btn danger" style="margin-right: auto;">مسح الحقل</button>
+          </div>
+        </div>
+
+        <!-- Preview Table -->
+        <div id="importPreviewSection" style="display: none; margin-top: 24px;">
+          <div class="log-table-wrapper">
+            <div class="table-actions" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <h3>معاينة البيانات المستخلصة (<span id="importCount">0</span> سجل)</h3>
+              <button type="button" id="btnSaveImported" class="apple-btn accent">حفظ السجلات المستخلصة في قاعدة البيانات</button>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="apple-table" id="tblImportPreview">
+                <thead id="tblImportPreviewHead">
+                  <!-- Injected by JS depending on mode -->
+                </thead>
+                <tbody id="tblImportPreviewBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

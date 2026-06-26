@@ -13,6 +13,10 @@ let deposits = [];
 let trendChart = null;
 let regionChart = null;
 
+// Global import state variables
+let importedData = [];
+let importMode = '';
+
 // DOM Elements
 const dbStatusDot = document.getElementById('dbStatusDot');
 const dbStatusText = document.getElementById('dbStatusText');
@@ -773,6 +777,71 @@ function setupEventListeners() {
   document.getElementById('searchPlans').addEventListener('input', renderPlansTable);
   document.getElementById('searchPurchases').addEventListener('input', renderPurchasesTable);
   document.getElementById('searchDeposits').addEventListener('input', renderDepositsTable);
+
+  // Auto-fill plan weight per trip when product is selected in Daily Plan form
+  const txPlanProductIdSelect = document.getElementById('txPlanProductId');
+  if (txPlanProductIdSelect) {
+    txPlanProductIdSelect.addEventListener('change', (e) => {
+      const prodId = e.target.value;
+      if (prodId) {
+        const prod = products.find(p => p.id === prodId);
+        if (prod && prod.standard_trip_weight) {
+          document.getElementById('txPlanWeightPerTrip').value = prod.standard_trip_weight;
+        }
+      }
+    });
+  }
+
+  // Auto-fill actual trip details when Daily Plan is selected
+  const txTripPlanIdSelect = document.getElementById('txTripPlanId');
+  if (txTripPlanIdSelect) {
+    txTripPlanIdSelect.addEventListener('change', (e) => {
+      const planId = e.target.value;
+      if (planId) {
+        const plan = dailyPlans.find(p => p.id === planId);
+        if (plan) {
+          document.getElementById('txTripPlannedWeight').value = plan.planned_weight_per_trip;
+          const regionSelect = document.getElementById('txTripRegionId');
+          if (regionSelect) regionSelect.value = plan.region_id;
+        }
+      }
+    });
+  }
+
+  // Auto-fill actual trip details when Purchase Order is selected
+  const txTripPurchaseIdSelect = document.getElementById('txTripPurchaseId');
+  if (txTripPurchaseIdSelect) {
+    txTripPurchaseIdSelect.addEventListener('change', (e) => {
+      const purchaseId = e.target.value;
+      if (purchaseId) {
+        const purchase = purchases.find(p => p.id === purchaseId);
+        if (purchase) {
+          const regionSelect = document.getElementById('txTripRegionId');
+          if (regionSelect) regionSelect.value = purchase.region_id;
+
+          const prod = products.find(p => p.id === purchase.product_id);
+          if (prod && prod.standard_trip_weight) {
+            document.getElementById('txTripPlannedWeight').value = prod.standard_trip_weight;
+          }
+        }
+      }
+    });
+  }
+
+  // Auto-import event listeners
+  const btnParsePlans = document.getElementById('btnParsePlans');
+  const btnParseTrips = document.getElementById('btnParseTrips');
+  const btnClearImport = document.getElementById('btnClearImport');
+  const btnSaveImported = document.getElementById('btnSaveImported');
+
+  if (btnParsePlans) btnParsePlans.addEventListener('click', handleParsePlans);
+  if (btnParseTrips) btnParseTrips.addEventListener('click', handleParseTrips);
+  if (btnClearImport) btnClearImport.addEventListener('click', () => {
+    document.getElementById('importRawText').value = '';
+    document.getElementById('importPreviewSection').style.display = 'none';
+    importedData = [];
+  });
+  if (btnSaveImported) btnSaveImported.addEventListener('click', saveImportedToDatabase);
 }
 
 // Generic function to attach form submission insert logic
@@ -817,4 +886,347 @@ function setupFormInsert(formId, tableName, getPayloadFn, inputsToClear) {
       alert(`فشل الحفظ: ${error.message}`);
     }
   });
+}
+
+// ============================================================
+// TEXT PARSER & AUTO IMPORT LOGIC
+// ============================================================
+
+// Arabic date parser helper
+function parseArabicDate(dateStr) {
+  const match = dateStr.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (match) {
+    const day = match[1].padStart(2, '0');
+    const month = match[2].padStart(2, '0');
+    const year = match[3];
+    return `${year}-${month}-${day}`;
+  }
+  const d = new Date();
+  return d.toISOString().split('T')[0];
+}
+
+// 1. Parsing Daily Plans from WhatsApp text
+function handleParsePlans() {
+  const rawText = document.getElementById('importRawText').value.trim();
+  if (!rawText) {
+    alert('الرجاء لصق رسائل المخطط أولاً.');
+    return;
+  }
+
+  const blocks = rawText.split(/عميلنا العزيز/i).filter(b => b.trim().length > 0);
+  importedData = [];
+  importMode = 'plans';
+
+  blocks.forEach(block => {
+    const typeMatch = block.match(/النوع:\s*([^\n]+)/);
+    const qtyMatch = block.match(/الكمية:\s*([\d.]+)/);
+    const dateMatch = block.match(/(?:📅\s*)?التاريخ:\s*([^\n]+)/);
+    const regionMatch = block.match(/(?:📍\s*)?موقع التسليم:\s*([^\n]+)/);
+    const transporterMatch = block.match(/(?:🚛\s*)?شركة النقل:\s*([^\n]+)/);
+
+    let factoryName = "أسمنت العريش";
+    if (block.includes("العريش للأسمنت")) {
+      factoryName = "أسمنت العريش";
+    }
+
+    if (typeMatch && qtyMatch && dateMatch && regionMatch) {
+      const type = typeMatch[1].trim();
+      const qty = parseFloat(qtyMatch[1]);
+      const rawDate = dateMatch[1].trim();
+      const cleanDate = parseArabicDate(rawDate);
+      const region = regionMatch[1].trim();
+      const transporter = transporterMatch ? transporterMatch[1].trim() : "غير محدد";
+
+      importedData.push({
+        factoryName,
+        productName: type,
+        quantity: qty,
+        date: cleanDate,
+        rawDate,
+        regionName: region,
+        transporterName: transporter
+      });
+    }
+  });
+
+  renderImportPreview();
+}
+
+// 2. Parsing Actual Trips from WhatsApp text
+function handleParseTrips() {
+  const rawText = document.getElementById('importRawText').value.trim();
+  if (!rawText) {
+    alert('الرجاء لصق رسائل الإثبات أولاً.');
+    return;
+  }
+
+  const blocks = rawText.split(/مرحبًا\s*👋|مرحبا\s*👋/i).filter(b => b.trim().length > 0);
+  importedData = [];
+  importMode = 'trips';
+
+  blocks.forEach(block => {
+    const typeMatch = block.match(/نوع الخامة:\s*([^\n]+)/);
+    const saleOrderMatch = block.match(/رقم أمر البيع:\s*([^\n]+)/);
+    const weightMatch = block.match(/وزن النقلة الفعلي\s*\(طن\):\s*([\d.]+)/);
+    const permMatch = block.match(/رقم إذن التحميل:\s*([^\n]+)/);
+    const waybillMatch = block.match(/رقم بوليصة الشحن:\s*([^\n]+)/);
+    const transporterMatch = block.match(/اسم شركة النقل🚗?:\s*([^\n]+)/);
+    const driverMatch = block.match(/اسم السائق\s*🙎🏼‍♂️?:\s*([^\n—]+)/);
+    const driverPhoneMatch = block.match(/رقم السائق:\s*(\d+)/);
+    const platesBlock = block.match(/رقم السيارة:\s*([^\n—]+)(?:—\s*رقم المقطورة:\s*([^\n]+))?/);
+    const regionMatch = block.match(/موقع التسليم\s*🗺️?:\s*([^\n]+)/);
+    const receiverMatch = block.match(/اسم مسؤول الاستلام\s*👨🏼‍💼?:\s*([^\n—]+)/);
+    const receiverPhoneMatch = block.match(/رقمه:\s*(\d+)/);
+    const dateMatch = block.match(/تاريخ إثبات النقلة\s*📅?:\s*([^\n]+)/);
+
+    let factoryName = "أسمنت العريش";
+    if (block.includes("العريش للأسمنت")) {
+      factoryName = "أسمنت العريش";
+    }
+
+    if (typeMatch && weightMatch && dateMatch && regionMatch) {
+      const type = typeMatch[1].trim();
+      const weight = parseFloat(weightMatch[1]);
+      const rawDate = dateMatch[1].trim();
+      const cleanDate = parseArabicDate(rawDate);
+      const region = regionMatch[1].trim();
+
+      const saleOrder = saleOrderMatch ? saleOrderMatch[1].trim() : null;
+      const permNo = permMatch ? permMatch[1].trim() : null;
+      const waybillNo = waybillMatch ? waybillMatch[1].trim() : null;
+      const transporter = transporterMatch ? transporterMatch[1].trim() : "غير محدد";
+      const driver = driverMatch ? driverMatch[1].trim() : null;
+      const driverPhone = driverPhoneMatch ? driverPhoneMatch[1].trim() : null;
+      const carPlate = platesBlock ? platesBlock[1].trim() : null;
+      const trailerPlate = platesBlock && platesBlock[2] ? platesBlock[2].trim() : null;
+      const receiverName = receiverMatch ? receiverMatch[1].trim() : null;
+      const receiverPhone = receiverPhoneMatch ? receiverPhoneMatch[1].trim() : null;
+
+      importedData.push({
+        factoryName,
+        productName: type,
+        loadedWeight: weight,
+        date: cleanDate,
+        rawDate,
+        regionName: region,
+        saleOrder,
+        permNo,
+        waybillNo,
+        transporterName: transporter,
+        driverName: driver,
+        driverPhone,
+        carPlate,
+        trailerPlate,
+        receiverName,
+        receiverPhone
+      });
+    }
+  });
+
+  renderImportPreview();
+}
+
+// 3. Render the preview table
+function renderImportPreview() {
+  const section = document.getElementById('importPreviewSection');
+  const countEl = document.getElementById('importCount');
+  const thead = document.getElementById('tblImportPreviewHead');
+  const tbody = document.getElementById('tblImportPreviewBody');
+
+  if (importedData.length === 0) {
+    alert('لم نتمكن من استخلاص أي بيانات. يرجى التأكد من تطابق النص مع تنسيق الرسائل.');
+    section.style.display = 'none';
+    return;
+  }
+
+  countEl.textContent = importedData.length;
+  tbody.innerHTML = '';
+
+  if (importMode === 'plans') {
+    thead.innerHTML = `
+      <tr>
+        <th>المصنع</th>
+        <th>المنتج</th>
+        <th>الوزن المخطط (طن)</th>
+        <th>تاريخ الخطة</th>
+        <th>المنطقة</th>
+        <th>شركة النقل</th>
+      </tr>
+    `;
+
+    importedData.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${row.factoryName}</td>
+        <td>${row.productName}</td>
+        <td>${row.quantity} طن</td>
+        <td>${row.date}</td>
+        <td>${row.regionName}</td>
+        <td>${row.transporterName}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } else {
+    thead.innerHTML = `
+      <tr>
+        <th>التاريخ</th>
+        <th>إذن التحميل</th>
+        <th>المنتج</th>
+        <th>الوزن الفعلي</th>
+        <th>المنطقة</th>
+        <th>السائق والسيارة</th>
+        <th>شركة النقل</th>
+      </tr>
+    `;
+
+    importedData.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${row.date}</td>
+        <td>${row.permNo || 'بدون'}</td>
+        <td>${row.productName}</td>
+        <td>${row.loadedWeight} طن</td>
+        <td>${row.regionName}</td>
+        <td>${row.driverName || 'مجهول'} (${row.carPlate || ''})</td>
+        <td>${row.transporterName}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior: 'smooth' });
+}
+
+// 4. Save imported records to Supabase (creates missing master definitions dynamically)
+async function saveImportedToDatabase() {
+  if (!supabaseClient) {
+    alert('الرجاء الاتصال بقاعدة بيانات Supabase أولاً.');
+    return;
+  }
+
+  const btn = document.getElementById('btnSaveImported');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'جاري الحفظ والتهيئة...';
+
+  try {
+    let successCount = 0;
+
+    for (const item of importedData) {
+      // 1. Resolve Factory
+      let factory = factories.find(f => f.name.trim() === item.factoryName.trim());
+      if (!factory) {
+        const { data, error } = await supabaseClient
+          .from('factories')
+          .insert([{ name: item.factoryName.trim() }])
+          .select();
+        if (error) throw error;
+        factory = data[0];
+        factories.push(factory);
+      }
+
+      // 2. Resolve Region
+      let regionNameClean = item.regionName.trim();
+      let region = regions.find(r => r.name.trim() === regionNameClean);
+      if (!region) {
+        const { data, error } = await supabaseClient
+          .from('regions')
+          .insert([{ name: regionNameClean }])
+          .select();
+        if (error) throw error;
+        region = data[0];
+        regions.push(region);
+      }
+
+      // 3. Resolve Product under this factory
+      let product = products.find(p => p.name.trim() === item.productName.trim() && p.factory_id === factory.id);
+      if (!product) {
+        const { data, error } = await supabaseClient
+          .from('factory_products')
+          .insert([{ 
+            factory_id: factory.id, 
+            name: item.productName.trim(),
+            standard_trip_weight: item.quantity || item.loadedWeight || 75
+          }])
+          .select();
+        if (error) throw error;
+        product = data[0];
+        products.push(product);
+      }
+
+      // 4. Resolve Transporter
+      let transporter = transporters.find(t => t.name.trim() === item.transporterName.trim());
+      if (!transporter && item.transporterName) {
+        const { data, error } = await supabaseClient
+          .from('transporters')
+          .insert([{ name: item.transporterName.trim() }])
+          .select();
+        if (error) throw error;
+        transporter = data[0];
+        transporters.push(transporter);
+      }
+
+      // 5. Insert operational record
+      if (importMode === 'plans') {
+        const { error } = await supabaseClient
+          .from('daily_plans')
+          .insert([{
+            product_id: product.id,
+            region_id: region.id,
+            plan_date: item.date,
+            planned_trips: 1,
+            planned_weight_per_trip: item.quantity
+          }]);
+        if (error) throw error;
+      } else {
+        // Find matching daily plan if exists to link
+        let linkedPlanId = null;
+        const matchPlan = dailyPlans.find(dp => 
+          dp.product_id === product.id && 
+          dp.region_id === region.id && 
+          dp.plan_date === item.date
+        );
+        if (matchPlan) linkedPlanId = matchPlan.id;
+
+        const { error } = await supabaseClient
+          .from('trips')
+          .insert([{
+            daily_plan_id: linkedPlanId,
+            region_id: region.id,
+            transporter_id: transporter ? transporter.id : null,
+            trip_date: item.date,
+            planned_weight_tons: item.loadedWeight,
+            loaded_weight_tons: item.loadedWeight,
+            loading_permission_number: item.permNo,
+            waybill_number: item.waybillNo,
+            driver_name: item.driverName,
+            driver_phone: item.driverPhone,
+            vehicle_plate: item.carPlate,
+            trailer_plate: item.trailerPlate,
+            notes: `مسؤول الاستلام: ${item.receiverName || ''} | رقمه: ${item.receiverPhone || ''}`
+          }]);
+        if (error) throw error;
+      }
+
+      successCount++;
+    }
+
+    alert(`تم حفظ عدد ${successCount} سجل بنجاح في قاعدة البيانات وتحديث الجداول!`);
+    
+    // Clear textarea and preview
+    document.getElementById('importRawText').value = '';
+    document.getElementById('importPreviewSection').style.display = 'none';
+    importedData = [];
+
+    // Reload all data
+    await loadAllData();
+
+  } catch (error) {
+    console.error('Import saving failed:', error);
+    alert(`حدث خطأ أثناء حفظ البيانات: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
