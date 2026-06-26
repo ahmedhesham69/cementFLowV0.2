@@ -98,6 +98,7 @@ body {
   cursor: pointer;
   transition: var(--transition);
   white-space: nowrap;
+  flex-shrink: 0; /* Prevents shrinking on Safari mobile */
 }
 
 .nav-tab-btn:hover {
@@ -410,6 +411,30 @@ body {
   user-select: none;
   -webkit-user-select: none;
   outline: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  list-style: none; /* Hide default list marker */
+}
+
+.accordion-item summary::-webkit-details-marker {
+  display: none; /* Hide Safari list marker */
+}
+
+.accordion-item summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-bottom: 2px solid var(--text-sub);
+  border-left: 2px solid var(--text-sub);
+  transform: rotate(-45deg);
+  transition: transform 0.2s ease;
+  margin-right: auto;
+  margin-left: 4px;
+}
+
+.accordion-item[open] summary::after {
+  transform: rotate(135deg);
 }
 
 .accordion-item summary:hover {
@@ -455,6 +480,17 @@ body {
   outline: none;
   transition: var(--transition);
   width: 100%;
+}
+
+.apple-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: left 12px center;
+  background-size: 16px;
+  padding-left: 36px;
 }
 
 .apple-form input:focus, .apple-form select:focus {
@@ -519,6 +555,7 @@ body {
   cursor: pointer;
   transition: var(--transition);
   white-space: nowrap;
+  flex-shrink: 0; /* Prevents shrinking on Safari mobile */
 }
 
 .sub-tab-btn:hover {
@@ -685,17 +722,34 @@ body {
 }
 
 @media (max-width: 768px) {
+  body {
+    padding: 12px;
+  }
   .app-header {
     flex-direction: column;
     align-items: stretch;
+    padding: 16px;
+    gap: 12px;
+  }
+  .status-indicator {
+    align-self: center;
   }
   .nav-tabs {
+    width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 6px;
+  }
+  .entry-layout, .apple-grid, .charts-row {
+    grid-template-columns: 1fr;
   }
   .input-row {
     grid-template-columns: 1fr;
   }
   .apple-search {
     width: 100%;
+  }
+  .apple-form input, .apple-form select, .apple-search {
+    font-size: 16px; /* Prevents auto-zoom on iOS Safari */
   }
 }
