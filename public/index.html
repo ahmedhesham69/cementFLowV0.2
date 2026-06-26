@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CementFlow - لوحة التحكم والمراقبة</title>
+  <!-- Google Fonts: Tajawal -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Top Apple-like Nav -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="logo-dot"></span>
+        <span class="logo-text">CementFlow</span>
+      </div>
+      
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs">
+        <button class="nav-tab-btn active" data-tab="overviewTab">نظرة عامة</button>
+        <button class="nav-tab-btn" data-tab="factoryTab">الكميات والمصانع</button>
+        <button class="nav-tab-btn" data-tab="entryTab">إدخال البيانات</button>
+        <button class="nav-tab-btn" data-tab="logsTab">سجل الحركات</button>
+        <button class="nav-tab-btn" data-tab="settingsTab">الاتصال بقاعدة البيانات</button>
+      </nav>
+      
+      <div class="status-indicator">
+        <span class="indicator-dot offline" id="dbStatusDot"></span>
+        <span class="indicator-text" id="dbStatusText">غير متصل</span>
+      </div>
+    </header>
+
+    <!-- Main View Content -->
+    <main class="main-content">
+      
+      <!-- TAB 1: OVERVIEW -->
+      <div class="tab-pane active" id="overviewTab">
+        
+        <!-- Welcome Section -->
+        <div class="welcome-banner">
+          <h1>مرحباً بك في لوحة تحكم CementFlow</h1>
+          <p>تابع أرصدة المصانع، كميات الشحن، وحركات النولون الفعلية لحظة بلحظة.</p>
+        </div>
+
+        <!-- KPI Metrics Row -->
+        <section class="kpi-row">
+          <div class="kpi-card">
+            <span class="kpi-label">إجمالي رصيد الإيداعات بالمصانع</span>
+            <div class="kpi-value" id="kpiBalance">0.00 <span class="currency">ج.م</span></div>
+            <span class="kpi-subtext">صافي رصيد الإيداع الحالي بعد الرحلات</span>
+          </div>
+          
+          <div class="kpi-card">
+            <span class="kpi-label">إجمالي الكميات المخططة</span>
+            <div class="kpi-value" id="kpiPlanned">0 <span class="currency">طن</span></div>
+            <span class="kpi-subtext">إجمالي كميات أوامر الشحن المفتوحة</span>
+          </div>
+
+          <div class="kpi-card">
+            <span class="kpi-label">الكميات المحملة فعلياً</span>
+            <div class="kpi-value" id="kpiLoaded">0 <span class="currency">طن</span></div>
+            <span class="kpi-subtext" id="kpiProgressPct">نسبة إنجاز التحميل: 0%</span>
+            <div class="apple-progress-bar">
+              <div class="progress-fill" id="kpiProgressFill"></div>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <span class="kpi-label">العجز المسترد (المرتجع)</span>
+            <div class="kpi-value danger" id="kpiDeficit">0 <span class="currency">طن</span></div>
+            <span class="kpi-subtext">أوزان مخصومة لم يتم تحميلها فعلياً</span>
+          </div>
+        </section>
+
+        <!-- Charts Container -->
+        <div class="charts-row">
+          <div class="chart-card">
+            <h3>مقارنة كميات التحميل (مخطط مقابل فعلي)</h3>
+            <div class="chart-wrapper">
+              <canvas id="overviewTrendChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>توزيع الحمولة الفعلية حسب مناطق التسليم</h3>
+            <div class="chart-wrapper">
+              <canvas id="overviewRegionChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: FACTORY QUANTITIES & BALANCES -->
+      <div class="tab-pane" id="factoryTab">
+        <div class="section-header">
+          <h2>الكميات والمنتجات حسب المصنع</h2>
+          <p>عرض الأرصدة المتبقية، العجز المسترد، ونسب التحميل الفعلية لكل منتج مصنع.</p>
+        </div>
+        <div class="apple-grid" id="factoryCardsContainer">
+          <div class="no-data-msg">الرجاء الاتصال بقاعدة البيانات أولاً لعرض الحسابات.</div>
+        </div>
+      </div>
+
+      <!-- TAB 3: DATA ENTRY FORMS -->
+      <div class="tab-pane" id="entryTab">
+        <div class="entry-layout">
+          
+          <!-- Master Data / Definitions Form Panel -->
+          <div class="form-panel">
+            <h2>إضافة التعريفات الأساسية</h2>
+            <p class="panel-desc">أضف المصانع، المنتجات، المناطق، وشركات النقل لتستخدمها في المعاملات اللاحقة.</p>
+            
+            <div class="accordion">
+              
+              <!-- 1. Add Factory -->
+              <details class="accordion-item" open>
+                <summary>إضافة مصنع جديد</summary>
+                <form id="formAddFactory" class="apple-form">
+                  <div class="input-group">
+                    <label for="defFactoryName">اسم المصنع</label>
+                    <input type="text" id="defFactoryName" placeholder="مثال: أسمنت العريش" required>
+                  </div>
+                  <div class="input-group">
+                    <label for="defFactoryLoc">الموقع الجغرافي</label>
+                    <input type="text" id="defFactoryLoc" placeholder="مثال: شمال سيناء">
+                  </div>
+                  <button type="submit" class="apple-btn">حفظ المصنع</button>
+                </form>
+              </details>
+
+              <!-- 2. Add Region -->
+              <details class="accordion-item">
+                <summary>إضافة منطقة تسليم</summary>
+                <form id="formAddRegion" class="apple-form">
+                  <div class="input-group">
+                    <label for="defRegionName">اسم المنطقة</label>
+                    <input type="text" id="defRegionName" placeholder="مثال: المغارة - شمال سيناء" required>
+                  </div>
+                  <button type="submit" class="apple-btn">حفظ المنطقة</button>
+                </form>
+              </details>
+
+              <!-- 3. Add Factory Product -->
+              <details class="accordion-item">
+                <summary>إضافة منتج للمصنع</summary>
+                <form id="formAddProduct" class="apple-form">
+                  <div class="input-group">
+                    <label for="defProductFactoryId">المصنع التابع له</label>
+                    <select id="defProductFactoryId" required>
+                      <option value="">اختر المصنع...</option>
+                    </select>
+                  </div>
+                  <div class="input-group">
+                    <label for="defProductName">اسم المنتج</label>
+                    <input type="text" id="defProductName" placeholder="مثال: معبأ 42.5" required>
+                  </div>
+                  <div class="input-group">
+                    <label for="defProductWeight">الوزن القياسي للنقلة (طن)</label>
+                    <input type="number" step="0.01" id="defProductWeight" placeholder="مثال: 75">
+                  </div>
+                  <button type="submit" class="apple-btn">حفظ المنتج</button>
+                </form>
+              </details>
+
+              <!-- 4. Add Transporter -->
+              <details class="accordion-item">
+                <summary>إضافة شركة نقل مستقلة</summary>
+                <form id="formAddTransporter" class="apple-form">
+                  <div class="input-group">
+                    <label for="defTransporterName">اسم شركة النقل</label>
+                    <input type="text" id="defTransporterName" placeholder="مثال: المصرية الدولية للنقل" required>
+                  </div>
+                  <div class="input-group">
+                    <label for="defTransporterPhone">رقم الهاتف</label>
+                    <input type="text" id="defTransporterPhone" placeholder="مثال: 010...">
+                  </div>
+                  <button type="submit" class="apple-btn">حفظ الشركة</button>
+                </form>
+              </details>
+            </div>
+          </div>
+
+          <!-- Transaction Data Entry Panel -->
+          <div class="form-panel">
+            <h2>تسجيل المعاملات اليومية والمالية</h2>
+            <p class="panel-desc">قم بتسجيل الإيداعات، أوامر الشراء، خطط التحميل، والرحلات الفعلية لتحديث الأرصدة.</p>
+            
+            <div class="accordion">
+              
+              <!-- 1. Add Factory Deposit -->
+              <details class="accordion-item" open>
+                <summary>إضافة إيداع مالي مسبق للمصنع</summary>
+                <form id="formAddDeposit" class="apple-form">
+                  <div class="input-group">
+                    <label for="txDepositFactoryId">المصنع المستلم</label>
+                    <select id="txDepositFactoryId" required>
+                      <option value="">اختر المصنع...</option>
+                    </select>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txDepositDate">تاريخ الحوالة/الإيداع</label>
+                      <input type="date" id="txDepositDate" required>
+                    </div>
+                    <div class="input-group">
+                      <label for="txDepositAmount">المبلغ (ج.م)</label>
+                      <input type="number" step="0.01" id="txDepositAmount" placeholder="0.00" required>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txDepositMethod">طريقة الدفع</label>
+                      <select id="txDepositMethod">
+                        <option value="bank_transfer">حوالة بنكية</option>
+                        <option value="cash">نقدي</option>
+                        <option value="cheque">شيك بنكي</option>
+                        <option value="other">أخرى</option>
+                      </select>
+                    </div>
+                    <div class="input-group">
+                      <label for="txDepositRef">رقم المرجع (الحوالة/الشيك)</label>
+                      <input type="text" id="txDepositRef" placeholder="مثال: TRX-10022">
+                    </div>
+                  </div>
+                  <div class="input-group">
+                    <label for="txDepositNotes">ملاحظات إضافية</label>
+                    <input type="text" id="txDepositNotes" placeholder="أية تفاصيل إضافية...">
+                  </div>
+                  <button type="submit" class="apple-btn accent">تسجيل الإيداع</button>
+                </form>
+              </details>
+
+              <!-- 2. Add Purchase Order -->
+              <details class="accordion-item">
+                <summary>تسجيل أمر شراء (منتج، كمية، سعر وصال، منطقة)</summary>
+                <form id="formAddPurchase" class="apple-form">
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txPurchaseProductId">المنتج</label>
+                      <select id="txPurchaseProductId" required>
+                        <option value="">اختر المنتج...</option>
+                      </select>
+                    </div>
+                    <div class="input-group">
+                      <label for="txPurchaseRegionId">المنطقة (موقع التسليم)</label>
+                      <select id="txPurchaseRegionId" required>
+                        <option value="">اختر المنطقة...</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txPurchaseDate">تاريخ الشراء</label>
+                      <input type="date" id="txPurchaseDate" required>
+                    </div>
+                    <div class="input-group">
+                      <label for="txPurchaseQty">الكمية المخططة (بالطن)</label>
+                      <input type="number" step="0.01" id="txPurchaseQty" placeholder="مثال: 80" required>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txPurchasePrice">السعر للطن وصال (ج.م)</label>
+                      <input type="number" step="0.01" id="txPurchasePrice" placeholder="مثال: 2500" required>
+                    </div>
+                    <div class="input-group">
+                      <label for="txPurchaseNotes">ملاحظات</label>
+                      <input type="text" id="txPurchaseNotes" placeholder="أمر شراء جديد...">
+                    </div>
+                  </div>
+                  <button type="submit" class="apple-btn accent">تسجيل أمر الشراء</button>
+                </form>
+              </details>
+
+              <!-- 3. Add Daily Plan -->
+              <details class="accordion-item">
+                <summary>تسجيل خطة تحميل يومية (مجدولة لليوم)</summary>
+                <form id="formAddDailyPlan" class="apple-form">
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txPlanProductId">المنتج</label>
+                      <select id="txPlanProductId" required>
+                        <option value="">اختر المنتج...</option>
+                      </select>
+                    </div>
+                    <div class="input-group">
+                      <label for="txPlanRegionId">المنطقة</label>
+                      <select id="txPlanRegionId" required>
+                        <option value="">اختر المنطقة...</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txPlanDate">تاريخ الخطة</label>
+                      <input type="date" id="txPlanDate" required>
+                    </div>
+                    <div class="input-group">
+                      <label for="txPlanTrips">عدد الرحلات المخططة</label>
+                      <input type="number" id="txPlanTrips" placeholder="مثال: 2" required>
+                    </div>
+                  </div>
+                  <div class="input-group">
+                    <label for="txPlanWeightPerTrip">الوزن المخطط لكل نقلة (طن)</label>
+                    <input type="number" step="0.01" id="txPlanWeightPerTrip" placeholder="مثال: 75" required>
+                  </div>
+                  <button type="submit" class="apple-btn accent">حفظ الخطة اليومية</button>
+                </form>
+              </details>
+
+              <!-- 4. Add Actual Trip -->
+              <details class="accordion-item">
+                <summary>إثبات شحنة/رحلة فعلية (تفاصيل السيارة والوزن الفعلي)</summary>
+                <form id="formAddTrip" class="apple-form">
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txTripPurchaseId">ارتباط بأمر الشراء</label>
+                      <select id="txTripPurchaseId">
+                        <option value="">اختياري (ربط للشحن الفعلي)...</option>
+                      </select>
+                    </div>
+                    <div class="input-group">
+                      <label for="txTripPlanId">ارتباط بالخطة اليومية</label>
+                      <select id="txTripPlanId">
+                        <option value="">اختياري (ربط بالخطة)...</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txTripRegionId">المنطقة الفعلية للتسليم</label>
+                      <select id="txTripRegionId" required>
+                        <option value="">اختر منطقة التسليم...</option>
+                      </select>
+                    </div>
+                    <div class="input-group">
+                      <label for="txTripTransporterId">شركة النقل</label>
+                      <select id="txTripTransporterId" required>
+                        <option value="">اختر شركة النقل...</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txTripDate">تاريخ التحميل الفعلي</label>
+                      <input type="date" id="txTripDate" required>
+                    </div>
+                    <div class="input-group">
+                      <label for="txTripPlannedWeight">الوزن المخطط للشحنة (طن)</label>
+                      <input type="number" step="0.01" id="txTripPlannedWeight" placeholder="مثال: 80" required>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txTripLoadedWeight">الوزن الفعلي المحمل (طن)</label>
+                      <input type="number" step="0.01" id="txTripLoadedWeight" placeholder="مثال: 72" required>
+                    </div>
+                    <div class="input-group">
+                      <label for="txTripPurchasePrice">سعر شراء الطن الفعلي (وصال)</label>
+                      <input type="number" step="0.01" id="txTripPurchasePrice" placeholder="مثال: 2500">
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txTripPermissionNo">رقم إذن التحميل</label>
+                      <input type="text" id="txTripPermissionNo" placeholder="مثال: 30184250">
+                    </div>
+                    <div class="input-group">
+                      <label for="txTripWaybillNo">رقم بوليصة الشحن</label>
+                      <input type="text" id="txTripWaybillNo" placeholder="مثال: 10678888">
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txTripDriverName">اسم السائق</label>
+                      <input type="text" id="txTripDriverName" placeholder="جمال سعد...">
+                    </div>
+                    <div class="input-group">
+                      <label for="txTripDriverPhone">رقم هاتف السائق</label>
+                      <input type="text" id="txTripDriverPhone" placeholder="010...">
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <div class="input-group">
+                      <label for="txTripCarPlate">رقم السيارة</label>
+                      <input type="text" id="txTripCarPlate" placeholder="مثال: 9237">
+                    </div>
+                    <div class="input-group">
+                      <label for="txTripTrailerPlate">رقم المقطورة</label>
+                      <input type="text" id="txTripTrailerPlate" placeholder="مثال: 4189">
+                    </div>
+                  </div>
+                  <div class="input-group">
+                    <label for="txTripNotes">ملاحظات الشحنة</label>
+                    <input type="text" id="txTripNotes" placeholder="أي تفاصيل أخرى...">
+                  </div>
+                  <button type="submit" class="apple-btn accent">تسجيل وإثبات الرحلة</button>
+                </form>
+              </details>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: DATA LOGS -->
+      <div class="tab-pane" id="logsTab">
+        
+        <!-- Logs Switch Subnav -->
+        <div class="logs-subnav">
+          <button class="sub-tab-btn active" data-subtab="tripsLog">سجل الرحلات الفعلية</button>
+          <button class="sub-tab-btn" data-subtab="plansLog">خطط التحميل اليومية</button>
+          <button class="sub-tab-btn" data-subtab="purchasesLog">أوامر الشراء</button>
+          <button class="sub-tab-btn" data-subtab="depositsLog">حركات الإيداع المالي</button>
+        </div>
+
+        <!-- 1. Trips Log Table -->
+        <div class="sub-tab-pane active" id="tripsLog">
+          <div class="log-table-wrapper">
+            <div class="table-actions">
+              <input type="text" id="searchTrips" placeholder="البحث باسم السائق، لوحة السيارة، إذن التحميل..." class="apple-search">
+            </div>
+            <div class="table-responsive">
+              <table class="apple-table">
+                <thead>
+                  <tr>
+                    <th>تاريخ الشحن</th>
+                    <th>إذن التحميل</th>
+                    <th>بوليصة الشحن</th>
+                    <th>المصنع</th>
+                    <th>المنتج</th>
+                    <th>المنطقة</th>
+                    <th>الوزن المخطط (طن)</th>
+                    <th>الوزن الفعلي (طن)</th>
+                    <th>العجز المسترد (طن)</th>
+                    <th>شركة النقل</th>
+                    <th>السائق والسيارة</th>
+                  </tr>
+                </thead>
+                <tbody id="tblTripsBody">
+                  <tr><td colspan="11" class="loading-td">جاري تحميل الرحلات...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Plans Log Table -->
+        <div class="sub-tab-pane" id="plansLog">
+          <div class="log-table-wrapper">
+            <div class="table-actions">
+              <input type="text" id="searchPlans" placeholder="البحث بالمنتج أو المنطقة..." class="apple-search">
+            </div>
+            <div class="table-responsive">
+              <table class="apple-table">
+                <thead>
+                  <tr>
+                    <th>التاريخ</th>
+                    <th>المصنع</th>
+                    <th>المنتج</th>
+                    <th>المنطقة</th>
+                    <th>عدد النقلات المخططة</th>
+                    <th>الوزن للنقلة (طن)</th>
+                    <th>حالة الخطة</th>
+                  </tr>
+                </thead>
+                <tbody id="tblPlansBody">
+                  <tr><td colspan="7" class="loading-td">جاري تحميل خطط التحميل...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Purchases Log Table -->
+        <div class="sub-tab-pane" id="purchasesLog">
+          <div class="log-table-wrapper">
+            <div class="table-actions">
+              <input type="text" id="searchPurchases" placeholder="البحث بالمنتج أو المنطقة..." class="apple-search">
+            </div>
+            <div class="table-responsive">
+              <table class="apple-table">
+                <thead>
+                  <tr>
+                    <th>التاريخ</th>
+                    <th>المصنع</th>
+                    <th>المنتج</th>
+                    <th>المنطقة</th>
+                    <th>الكمية المشتراة (طن)</th>
+                    <th>سعر الطن وصال</th>
+                    <th>القيمة الإجمالية</th>
+                  </tr>
+                </thead>
+                <tbody id="tblPurchasesBody">
+                  <tr><td colspan="7" class="loading-td">جاري تحميل المشتريات...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Deposits Log Table -->
+        <div class="sub-tab-pane" id="depositsLog">
+          <div class="log-table-wrapper">
+            <div class="table-actions">
+              <input type="text" id="searchDeposits" placeholder="البحث برقم الحوالة أو المصنع..." class="apple-search">
+            </div>
+            <div class="table-responsive">
+              <table class="apple-table">
+                <thead>
+                  <tr>
+                    <th>التاريخ</th>
+                    <th>المصنع</th>
+                    <th>طريقة الدفع</th>
+                    <th>رقم المرجع</th>
+                    <th>المبلغ المودع (ج.م)</th>
+                    <th>ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody id="tblDepositsBody">
+                  <tr><td colspan="6" class="loading-td">جاري تحميل الإيداعات...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TAB 5: DATABASE CONNECTION SETTINGS -->
+      <div class="tab-pane" id="settingsTab">
+        <div class="settings-card">
+          <h2>الاتصال بقاعدة بيانات Supabase</h2>
+          <p>أدخل بيانات الربط الخاصة بـ Supabase الخاصة بمشروعك للوصول لبيانات قاعدة البيانات مباشرة.</p>
+          
+          <form id="formConnectionSettings" class="apple-form">
+            <div class="input-group">
+              <label for="sbUrl">Supabase Project URL</label>
+              <input type="url" id="sbUrl" placeholder="https://xxxxxx.supabase.co" required>
+            </div>
+            <div class="input-group">
+              <label for="sbAnonKey">Supabase Anon Key</label>
+              <input type="password" id="sbAnonKey" placeholder="eyJhbGciOi..." required>
+            </div>
+            
+            <div class="settings-actions">
+              <button type="submit" class="apple-btn accent">حفظ وإجراء اختبار اتصال</button>
+              <button type="button" id="btnDisconnect" class="apple-btn danger">قطع الاتصال</button>
+            </div>
+          </form>
+
+          <div class="settings-help">
+            <h3>تنبيه هام حول الأمن:</h3>
+            <p>يتم تخزين بيانات الاتصال الخاصة بك محلياً وبشكل آمن في متصفحك فقط (عبر LocalStorage) ولا يتم إرسالها لأي خادم خارجي.</p>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Main JavaScript App Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

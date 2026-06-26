@@ -1,0 +1,11 @@
+# AI agent files
+.agents/
+.gemini/
+
+# Node dependencies (if any)
+node_modules/
+.npm/
+
+# OS files
+.DS_Store
+Thumbs.db
