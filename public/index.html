@@ -98,6 +98,49 @@
             </div>
           </div>
         </div>
+
+        <!-- TAB 1.5: DEPOSIT CALCULATOR CARD -->
+        <div class="calculator-card" style="background: var(--bg-card); border: 1px solid var(--border-card); border-radius: var(--radius-card); padding: 20px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 16px; margin-top: 24px;">
+          <h3 style="font-size: 15px; font-weight: 700; border-bottom: 1px solid var(--border-card); padding-bottom: 12px; display: flex; align-items: center; gap: 8px; margin: 0;">
+            <span style="font-size: 18px;">🧮</span> حاسبة الرصيد والإيداع التقديري قبل الشراء
+          </h3>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+            <div class="input-group">
+              <label for="calcProductId" style="font-size: 11px; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; display: block;">المنتج المراد شراؤه</label>
+              <select id="calcProductId" style="background-color: var(--bg-input); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px; font-family: var(--font-family); font-size: 13px; outline: none; width: 100%;">
+                <option value="">اختر المنتج...</option>
+              </select>
+            </div>
+            
+            <div class="input-group">
+              <label for="calcQuantity" style="font-size: 11px; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; display: block;">الكمية المطلوبة (بالطن)</label>
+              <input type="number" id="calcQuantity" placeholder="مثال: 80" style="background-color: var(--bg-input); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px; font-family: var(--font-family); font-size: 13px; outline: none; width: 100%;">
+            </div>
+            
+            <div class="input-group">
+              <label for="calcPricePerTon" style="font-size: 11px; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; display: block;">سعر الطن المتوقع وصال (ج.م)</label>
+              <input type="number" id="calcPricePerTon" placeholder="مثال: 2500" style="background-color: var(--bg-input); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px; font-family: var(--font-family); font-size: 13px; outline: none; width: 100%;">
+            </div>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; background-color: #fbfbfd; border: 1px solid var(--border-card); border-radius: 12px; padding: 16px; margin-top: 8px;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-size: 11px; color: var(--text-sub); font-weight: 600;">تكلفة الشراء المتوقعة:</span>
+              <span id="calcTotalCost" style="font-size: 18px; font-weight: 700; color: var(--text-main);">0.00 ج.م</span>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-size: 11px; color: var(--text-sub); font-weight: 600;">الرصيد المتاح الحالي:</span>
+              <span id="calcCurrentBalance" style="font-size: 18px; font-weight: 700; color: var(--color-green);">0.00 ج.م</span>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="font-size: 11px; color: var(--text-sub); font-weight: 600;">مبلغ الإيداع المطلوب شحنه:</span>
+              <span id="calcRequiredDeposit" style="font-size: 20px; font-weight: 700; color: var(--color-red);">0.00 ج.م</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- TAB 2: FACTORY QUANTITIES & BALANCES -->

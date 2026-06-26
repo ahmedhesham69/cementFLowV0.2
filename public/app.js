@@ -16,6 +16,7 @@ let regionChart = null;
 // Global import state variables
 let importedData = [];
 let importMode = '';
+let currentAvailableBalance = 0;
 
 // DOM Elements
 const dbStatusDot = document.getElementById('dbStatusDot');
@@ -205,6 +206,7 @@ function populateFormSelects() {
     };
   });
   fillSelect('txTripPlanId', planOptions, 'id', 'name', true);
+  fillSelect('calcProductId', productOptions, 'id', 'name');
 }
 
 function fillSelect(elementId, dataset, valueKey, labelKey, optional = false) {
@@ -241,6 +243,7 @@ function updateKPIs() {
   });
 
   const availableBalance = totalDeposits - netLoadedCost;
+  currentAvailableBalance = availableBalance;
 
   // 3. Total planned & loaded quantities
   const totalPlanned = purchases.reduce((sum, p) => sum + parseFloat(p.quantity_tons), 0);
@@ -260,6 +263,9 @@ function updateKPIs() {
   const progress = totalPlanned > 0 ? Math.round((totalLoaded / totalPlanned) * 100) : 0;
   document.getElementById('kpiProgressPct').textContent = `نسبة إنجاز التحميل: ${progress}%`;
   document.getElementById('kpiProgressFill').style.width = `${Math.min(progress, 100)}%`;
+
+  // Update calculator UI if it exists
+  updateDepositCalculator();
 }
 
 // Render Apple-style Factory Cards
@@ -842,6 +848,32 @@ function setupEventListeners() {
     importedData = [];
   });
   if (btnSaveImported) btnSaveImported.addEventListener('click', saveImportedToDatabase);
+
+  // Calculator event listeners
+  const calcProductId = document.getElementById('calcProductId');
+  const calcQuantity = document.getElementById('calcQuantity');
+  const calcPricePerTon = document.getElementById('calcPricePerTon');
+
+  if (calcProductId) {
+    calcProductId.addEventListener('change', (e) => {
+      const prodId = e.target.value;
+      if (prodId) {
+        // Suggest last purchase price for this product
+        const lastPurchase = purchases.find(p => p.product_id === prodId);
+        if (lastPurchase && lastPurchase.price_per_ton) {
+          calcPricePerTon.value = lastPurchase.price_per_ton;
+        } else {
+          calcPricePerTon.value = '';
+        }
+      } else {
+        calcPricePerTon.value = '';
+      }
+      updateDepositCalculator();
+    });
+  }
+
+  if (calcQuantity) calcQuantity.addEventListener('input', updateDepositCalculator);
+  if (calcPricePerTon) calcPricePerTon.addEventListener('input', updateDepositCalculator);
 }
 
 // Generic function to attach form submission insert logic
@@ -1228,5 +1260,46 @@ async function saveImportedToDatabase() {
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
+  }
+}
+
+// 5. Update deposit calculator outputs in the UI
+function updateDepositCalculator() {
+  const calcQuantityInput = document.getElementById('calcQuantity');
+  const calcPricePerTonInput = document.getElementById('calcPricePerTon');
+  
+  const calcTotalCostEl = document.getElementById('calcTotalCost');
+  const calcCurrentBalanceEl = document.getElementById('calcCurrentBalance');
+  const calcRequiredDepositEl = document.getElementById('calcRequiredDeposit');
+
+  if (!calcQuantityInput || !calcPricePerTonInput) return;
+
+  const qty = parseFloat(calcQuantityInput.value) || 0;
+  const price = parseFloat(calcPricePerTonInput.value) || 0;
+  
+  const totalCost = qty * price;
+  
+  // Update Current Balance display
+  if (calcCurrentBalanceEl) {
+    calcCurrentBalanceEl.textContent = `${currentAvailableBalance.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+  }
+  
+  // Update Total Purchase Cost display
+  if (calcTotalCostEl) {
+    calcTotalCostEl.textContent = `${totalCost.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+  }
+
+  // Calculate required deposit
+  const requiredDeposit = Math.max(totalCost - currentAvailableBalance, 0);
+  
+  if (calcRequiredDepositEl) {
+    calcRequiredDepositEl.textContent = `${requiredDeposit.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+    
+    // Color coding based on whether deposit is needed
+    if (requiredDeposit > 0) {
+      calcRequiredDepositEl.style.color = 'var(--color-red)';
+    } else {
+      calcRequiredDepositEl.style.color = 'var(--color-green)';
+    }
   }
 }
